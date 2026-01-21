@@ -36,7 +36,9 @@ export async function POST(request: NextRequest) {
     const combinedContent = fileContents.join("\n");
 
     // Initialize Gemini model
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    // Using gemini-1.5-flash: faster, more cost-effective, suitable for analysis
+    // Alternative: gemini-1.5-pro for more complex analysis (slower but more capable)
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const prompt = `你是一位资深的DeFi专家和分析师。请分析以下DeFi项目的文档和代码，提供详细的分析报告。
 
