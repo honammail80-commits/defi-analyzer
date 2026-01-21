@@ -35,10 +35,32 @@ export async function POST(request: NextRequest) {
 
     const combinedContent = fileContents.join("\n");
 
+    // Check API key first
+    if (!process.env.GEMINI_API_KEY) {
+      return NextResponse.json(
+        { error: "GEMINI_API_KEY is not configured. Please set it in your environment variables." },
+        { status: 500 }
+      );
+    }
+
     // Initialize Gemini model
-    // Using gemini-1.5-flash: faster, more cost-effective, suitable for analysis
-    // Alternative: gemini-1.5-pro for more complex analysis (slower but more capable)
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // Based on Gemini Studio, check which model is actually available
+    // Common model names: "gemini-pro", "gemini-1.5-flash", "gemini-1.5-pro"
+    const modelName = "gemini-1.5-flash"; // Try the newer model first
+    console.log(`[Gemini] Attempting to use model: ${modelName}`);
+    console.log(`[Gemini] API Key present: ${!!process.env.GEMINI_API_KEY}`);
+    console.log(`[Gemini] Content length: ${combinedContent.length} characters`);
+    
+    const model = genAI.getGenerativeModel({ 
+      model: modelName,
+      // Add generation config for better control
+      generationConfig: {
+        temperature: 0.7,
+        topK: 40,
+        topP: 0.95,
+        maxOutputTokens: 2048,
+      }
+    });
 
     const prompt = `你是一位资深的DeFi专家和分析师。请分析以下DeFi项目的文档和代码，提供详细的分析报告。
 
@@ -74,9 +96,62 @@ ${combinedContent}
 
 请用中文回复，确保返回的是有效的JSON格式。`;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+    let result, response, text;
+    try {
+      console.log(`[Gemini] Starting content generation with model: ${modelName}`);
+      console.log(`[Gemini] Prompt length: ${prompt.length} characters`);
+      
+      // Try generateContent with proper error handling
+      result = await model.generateContent(prompt);
+      console.log(`[Gemini] Content generation completed`);
+      
+      response = await result.response;
+      console.log(`[Gemini] Response received`);
+      
+      text = response.text();
+      console.log(`[Gemini] Response text length: ${text.length} characters`);
+      
+    } catch (modelError: any) {
+      console.error(`[Gemini] Error details:`, {
+        message: modelError.message,
+        status: modelError.status,
+        statusText: modelError.statusText,
+        errorDetails: modelError.errorDetails,
+        stack: modelError.stack
+      });
+      
+      // If model not found, try fallback models
+      if (modelError.message?.includes("404") || modelError.message?.includes("not found")) {
+        // Try fallback to gemini-pro
+        try {
+          console.log(`[Gemini] Trying fallback model: gemini-pro`);
+          const fallbackModel = genAI.getGenerativeModel({ model: "gemini-pro" });
+          result = await fallbackModel.generateContent(prompt);
+          response = await result.response;
+          text = response.text();
+          console.log(`[Gemini] Fallback model succeeded`);
+        } catch (fallbackError: any) {
+          return NextResponse.json(
+            { 
+              error: "Model not available. Please check:",
+              details: [
+                "1. Your API key has access to the requested model",
+                "2. The model name is correct for your API key type",
+                "3. Visit https://aistudio.google.com/ to verify available models",
+                `4. Tried models: ${modelName}, gemini-pro`,
+                "5. Check Gemini Studio to see which models your API key supports"
+              ],
+              originalError: modelError.message,
+              fallbackError: fallbackError.message
+            },
+            { status: 500 }
+          );
+        }
+      } else {
+        // Other errors
+        throw modelError;
+      }
+    }
 
     // Extract JSON from response (handle markdown code blocks)
     let jsonText = text.trim();
