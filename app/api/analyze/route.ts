@@ -44,14 +44,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Initialize Gemini model
-    // Based on Gemini Studio, check which model is actually available
-    // Common model names: "gemini-pro", "gemini-1.5-flash", "gemini-1.5-pro"
-    const modelName = "gemini-1.5-flash"; // Try the newer model first
+    // With latest SDK (@google/generative-ai >= 0.21), we can use newer models
+    // Fallback to gemini-pro if gemini-1.5-flash is not available
+    const modelName = process.env.GEMINI_MODEL || "gemini-1.5-flash";
     console.log(`[Gemini] Attempting to use model: ${modelName}`);
     console.log(`[Gemini] API Key present: ${!!process.env.GEMINI_API_KEY}`);
     console.log(`[Gemini] Content length: ${combinedContent.length} characters`);
-    
-    const model = genAI.getGenerativeModel({ 
+
+    const model = genAI.getGenerativeModel({
       model: modelName,
       // Add generation config for better control
       generationConfig: {
@@ -100,17 +100,17 @@ ${combinedContent}
     try {
       console.log(`[Gemini] Starting content generation with model: ${modelName}`);
       console.log(`[Gemini] Prompt length: ${prompt.length} characters`);
-      
+
       // Try generateContent with proper error handling
       result = await model.generateContent(prompt);
       console.log(`[Gemini] Content generation completed`);
-      
+
       response = await result.response;
       console.log(`[Gemini] Response received`);
-      
+
       text = response.text();
       console.log(`[Gemini] Response text length: ${text.length} characters`);
-      
+
     } catch (modelError: any) {
       console.error(`[Gemini] Error details:`, {
         message: modelError.message,
@@ -119,38 +119,28 @@ ${combinedContent}
         errorDetails: modelError.errorDetails,
         stack: modelError.stack
       });
-      
-      // If model not found, try fallback models
+
+      // If model not found, provide detailed error
       if (modelError.message?.includes("404") || modelError.message?.includes("not found")) {
-        // Try fallback to gemini-pro
-        try {
-          console.log(`[Gemini] Trying fallback model: gemini-pro`);
-          const fallbackModel = genAI.getGenerativeModel({ model: "gemini-pro" });
-          result = await fallbackModel.generateContent(prompt);
-          response = await result.response;
-          text = response.text();
-          console.log(`[Gemini] Fallback model succeeded`);
-        } catch (fallbackError: any) {
-          return NextResponse.json(
-            { 
-              error: "Model not available. Please check:",
-              details: [
-                "1. Your API key has access to the requested model",
-                "2. The model name is correct for your API key type",
-                "3. Visit https://aistudio.google.com/ to verify available models",
-                `4. Tried models: ${modelName}, gemini-pro`,
-                "5. Check Gemini Studio to see which models your API key supports"
-              ],
-              originalError: modelError.message,
-              fallbackError: fallbackError.message
-            },
-            { status: 500 }
-          );
-        }
-      } else {
-        // Other errors
-        throw modelError;
+        return NextResponse.json(
+          {
+            error: "Model not available. Please check the following:",
+            details: [
+              `1. Tried model: ${modelName}`,
+              "2. For gemini-1.5-flash or gemini-1.5-pro, ensure you have SDK version >= 0.21",
+              "3. Check your API key has access to this model at https://aistudio.google.com/",
+              "4. You can set GEMINI_MODEL environment variable to use a different model",
+              "5. Fallback option: Set GEMINI_MODEL=gemini-pro for legacy compatibility",
+              "6. Current SDK version: check package.json for @google/generative-ai"
+            ],
+            originalError: modelError.message,
+            suggestion: "Try: export GEMINI_MODEL=gemini-pro (for legacy) or update SDK with: npm install @google/generative-ai@latest"
+          },
+          { status: 500 }
+        );
       }
+      // Other errors
+      throw modelError;
     }
 
     // Extract JSON from response (handle markdown code blocks)
