@@ -44,9 +44,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Initialize Gemini model
-    // NOTE: Current API key uses v1beta endpoint which only supports "gemini-pro"
-    // If you have a newer API key with v1 endpoint access, you can set GEMINI_MODEL=gemini-1.5-flash
-    const modelName = process.env.GEMINI_MODEL || "gemini-pro";
+    // Use the latest stable model: gemini-2.5-flash (faster) or gemini-2.5-pro (more capable)
+    // Old model names like "gemini-pro" and "gemini-1.5-flash" are deprecated
+    const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
     console.log(`[Gemini] Attempting to use model: ${modelName}`);
     console.log(`[Gemini] API Key present: ${!!process.env.GEMINI_API_KEY}`);
     console.log(`[Gemini] Content length: ${combinedContent.length} characters`);
@@ -127,14 +127,13 @@ ${combinedContent}
             error: "Model not available. Please check the following:",
             details: [
               `1. Tried model: ${modelName}`,
-              "2. For gemini-1.5-flash or gemini-1.5-pro, ensure you have SDK version >= 0.21",
-              "3. Check your API key has access to this model at https://aistudio.google.com/",
+              "2. Available models: gemini-2.5-flash, gemini-2.5-pro, gemini-flash-latest, gemini-pro-latest",
+              "3. Old models (gemini-pro, gemini-1.5-flash) are deprecated",
               "4. You can set GEMINI_MODEL environment variable to use a different model",
-              "5. Fallback option: Set GEMINI_MODEL=gemini-pro for legacy compatibility",
-              "6. Current SDK version: check package.json for @google/generative-ai"
+              "5. Check available models at https://ai.google.dev/models/gemini"
             ],
             originalError: modelError.message,
-            suggestion: "Try: export GEMINI_MODEL=gemini-pro (for legacy) or update SDK with: npm install @google/generative-ai@latest"
+            suggestion: "Try: export GEMINI_MODEL=gemini-2.5-flash or gemini-flash-latest"
           },
           { status: 500 }
         );
