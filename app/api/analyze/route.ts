@@ -44,9 +44,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Initialize Gemini model
-    // With latest SDK (@google/generative-ai >= 0.21), we can use newer models
-    // Fallback to gemini-pro if gemini-1.5-flash is not available
-    const modelName = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+    // NOTE: Current API key uses v1beta endpoint which only supports "gemini-pro"
+    // If you have a newer API key with v1 endpoint access, you can set GEMINI_MODEL=gemini-1.5-flash
+    const modelName = process.env.GEMINI_MODEL || "gemini-pro";
     console.log(`[Gemini] Attempting to use model: ${modelName}`);
     console.log(`[Gemini] API Key present: ${!!process.env.GEMINI_API_KEY}`);
     console.log(`[Gemini] Content length: ${combinedContent.length} characters`);
