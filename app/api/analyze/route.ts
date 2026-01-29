@@ -8,9 +8,11 @@ export const maxDuration = 60; // 60 seconds (requires Pro plan)
 export const runtime = 'nodejs'; // Use Node.js runtime for better compatibility
 
 // Initialize AI clients
+// Using DeepSeek API (compatible with OpenAI format, no regional restrictions)
 const aiService = process.env.AI_SERVICE || "openai";
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || "",
+  baseURL: process.env.OPENAI_BASE_URL || "https://api.deepseek.com"
 });
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
