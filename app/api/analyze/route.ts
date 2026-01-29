@@ -89,24 +89,26 @@ ${combinedContent}
         );
       }
 
-      const modelName = process.env.OPENAI_MODEL || "gpt-5-nano";
-      console.log(`[OpenAI] Using model: ${modelName}`);
-      console.log(`[OpenAI] API Key present: ${!!process.env.OPENAI_API_KEY}`);
-      console.log(`[OpenAI] Prompt length: ${prompt.length} characters`);
+      const modelName = process.env.OPENAI_MODEL || "deepseek-chat";
+      console.log(`[DeepSeek] Using model: ${modelName}`);
+      console.log(`[DeepSeek] API Key present: ${!!process.env.OPENAI_API_KEY}`);
+      console.log(`[DeepSeek] Prompt length: ${prompt.length} characters`);
 
       try {
-        const response = await openai.responses.create({
+        // Use standard OpenAI Chat Completions API (compatible with DeepSeek)
+        const response = await openai.chat.completions.create({
           model: modelName,
-          input: prompt,
-          store: true, // Store conversation for multi-turn support
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.7,
+          max_tokens: 2048,
         });
 
-        console.log(`[OpenAI] Response received`);
-        text = response.output_text;
-        console.log(`[OpenAI] Response text length: ${text.length} characters`);
+        console.log(`[DeepSeek] Response received`);
+        text = response.choices[0].message.content || "";
+        console.log(`[DeepSeek] Response text length: ${text.length} characters`);
 
       } catch (openaiError: any) {
-        console.error(`[OpenAI] Error details:`, {
+        console.error(`[DeepSeek] Error details:`, {
           message: openaiError.message,
           status: openaiError.status,
           code: openaiError.code,
@@ -115,9 +117,9 @@ ${combinedContent}
 
         return NextResponse.json(
           {
-            error: "OpenAI API request failed",
+            error: "DeepSeek API request failed",
             details: openaiError.message,
-            suggestion: "Check your OPENAI_API_KEY and ensure you have access to the model. You can also switch to Gemini by setting AI_SERVICE=gemini in your environment variables."
+            suggestion: "Check your OPENAI_API_KEY (DeepSeek API Key) and ensure it's valid. You can also switch to Gemini by setting AI_SERVICE=gemini in your environment variables."
           },
           { status: 500 }
         );
