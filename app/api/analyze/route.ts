@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 // Set max duration for long-running analysis
 // Vercel Hobby: 10s, Pro: 60s, Enterprise: 300s
 export const maxDuration = 60; // 60 seconds (requires Pro plan)
 export const runtime = 'nodejs'; // Use Node.js runtime for better compatibility
+
+// Initialize AI clients
+const aiService = process.env.AI_SERVICE || "openai";
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY || "",
+});
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 export async function POST(request: NextRequest) {
   try {
@@ -34,33 +40,6 @@ export async function POST(request: NextRequest) {
     }
 
     const combinedContent = fileContents.join("\n");
-
-    // Check API key first
-    if (!process.env.GEMINI_API_KEY) {
-      return NextResponse.json(
-        { error: "GEMINI_API_KEY is not configured. Please set it in your environment variables." },
-        { status: 500 }
-      );
-    }
-
-    // Initialize Gemini model
-    // Use the latest stable model: gemini-2.5-flash (faster) or gemini-2.5-pro (more capable)
-    // Old model names like "gemini-pro" and "gemini-1.5-flash" are deprecated
-    const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-    console.log(`[Gemini] Attempting to use model: ${modelName}`);
-    console.log(`[Gemini] API Key present: ${!!process.env.GEMINI_API_KEY}`);
-    console.log(`[Gemini] Content length: ${combinedContent.length} characters`);
-
-    const model = genAI.getGenerativeModel({
-      model: modelName,
-      // Add generation config for better control
-      generationConfig: {
-        temperature: 0.7,
-        topK: 40,
-        topP: 0.95,
-        maxOutputTokens: 2048,
-      }
-    });
 
     const prompt = `你是一位资深的DeFi专家和分析师。请分析以下DeFi项目的文档和代码，提供详细的分析报告。
 
@@ -96,50 +75,108 @@ ${combinedContent}
 
 请用中文回复，确保返回的是有效的JSON格式。`;
 
-    let result, response, text;
-    try {
-      console.log(`[Gemini] Starting content generation with model: ${modelName}`);
-      console.log(`[Gemini] Prompt length: ${prompt.length} characters`);
+    let text: string;
 
-      // Try generateContent with proper error handling
-      result = await model.generateContent(prompt);
-      console.log(`[Gemini] Content generation completed`);
+    // Use OpenAI or Gemini based on configuration
+    if (aiService === "openai") {
+      // OpenAI Responses API
+      if (!process.env.OPENAI_API_KEY) {
+        return NextResponse.json(
+          { error: "OPENAI_API_KEY is not configured. Please set it in your environment variables." },
+          { status: 500 }
+        );
+      }
 
-      response = await result.response;
-      console.log(`[Gemini] Response received`);
+      const modelName = process.env.OPENAI_MODEL || "gpt-5-nano";
+      console.log(`[OpenAI] Using model: ${modelName}`);
+      console.log(`[OpenAI] API Key present: ${!!process.env.OPENAI_API_KEY}`);
+      console.log(`[OpenAI] Prompt length: ${prompt.length} characters`);
 
-      text = response.text();
-      console.log(`[Gemini] Response text length: ${text.length} characters`);
+      try {
+        const response = await openai.responses.create({
+          model: modelName,
+          input: prompt,
+          store: true, // Store conversation for multi-turn support
+        });
 
-    } catch (modelError: any) {
-      console.error(`[Gemini] Error details:`, {
-        message: modelError.message,
-        status: modelError.status,
-        statusText: modelError.statusText,
-        errorDetails: modelError.errorDetails,
-        stack: modelError.stack
-      });
+        console.log(`[OpenAI] Response received`);
+        text = response.output_text;
+        console.log(`[OpenAI] Response text length: ${text.length} characters`);
 
-      // If model not found, provide detailed error
-      if (modelError.message?.includes("404") || modelError.message?.includes("not found")) {
+      } catch (openaiError: any) {
+        console.error(`[OpenAI] Error details:`, {
+          message: openaiError.message,
+          status: openaiError.status,
+          code: openaiError.code,
+          type: openaiError.type,
+        });
+
         return NextResponse.json(
           {
-            error: "Model not available. Please check the following:",
-            details: [
-              `1. Tried model: ${modelName}`,
-              "2. Available models: gemini-2.5-flash, gemini-2.5-pro, gemini-flash-latest, gemini-pro-latest",
-              "3. Old models (gemini-pro, gemini-1.5-flash) are deprecated",
-              "4. You can set GEMINI_MODEL environment variable to use a different model",
-              "5. Check available models at https://ai.google.dev/models/gemini"
-            ],
-            originalError: modelError.message,
-            suggestion: "Try: export GEMINI_MODEL=gemini-2.5-flash or gemini-flash-latest"
+            error: "OpenAI API request failed",
+            details: openaiError.message,
+            suggestion: "Check your OPENAI_API_KEY and ensure you have access to the model. You can also switch to Gemini by setting AI_SERVICE=gemini in your environment variables."
           },
           { status: 500 }
         );
       }
-      // Other errors
-      throw modelError;
+
+    } else {
+      // Gemini API (fallback)
+      if (!process.env.GEMINI_API_KEY) {
+        return NextResponse.json(
+          { error: "GEMINI_API_KEY is not configured. Please set it in your environment variables." },
+          { status: 500 }
+        );
+      }
+
+      const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+      console.log(`[Gemini] Using model: ${modelName}`);
+      console.log(`[Gemini] API Key present: ${!!process.env.GEMINI_API_KEY}`);
+      console.log(`[Gemini] Content length: ${combinedContent.length} characters`);
+
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: {
+          temperature: 0.7,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 2048,
+        }
+      });
+
+      try {
+        console.log(`[Gemini] Starting content generation`);
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        text = response.text();
+        console.log(`[Gemini] Response text length: ${text.length} characters`);
+
+      } catch (geminiError: any) {
+        console.error(`[Gemini] Error details:`, {
+          message: geminiError.message,
+          status: geminiError.status,
+          statusText: geminiError.statusText,
+        });
+
+        if (geminiError.message?.includes("404") || geminiError.message?.includes("not found")) {
+          return NextResponse.json(
+            {
+              error: "Model not available. Please check the following:",
+              details: [
+                `1. Tried model: ${modelName}`,
+                "2. Available models: gemini-2.5-flash, gemini-2.5-pro, gemini-flash-latest, gemini-pro-latest",
+                "3. Old models (gemini-pro, gemini-1.5-flash) are deprecated",
+                "4. You can set GEMINI_MODEL environment variable to use a different model",
+              ],
+              originalError: geminiError.message,
+              suggestion: "Try setting GEMINI_MODEL=gemini-2.5-flash or switch to OpenAI by setting AI_SERVICE=openai"
+            },
+            { status: 500 }
+          );
+        }
+        throw geminiError;
+      }
     }
 
     // Extract JSON from response (handle markdown code blocks)
@@ -157,6 +194,7 @@ ${combinedContent}
     } catch (parseError) {
       // Fallback if JSON parsing fails
       console.error("Failed to parse JSON:", parseError);
+      console.error("Raw text:", text);
       analysis = {
         risks: ["无法解析分析结果"],
         highlights: ["请检查API响应"],
